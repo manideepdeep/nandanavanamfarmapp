@@ -22,15 +22,7 @@ const AuthContext = createContext<AuthData>({
 
 export default function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<{
-    avatar_url: string;
-    created_at: string | null;
-    email: string;
-    expo_notification_token: string | null;
-    id: string;
-    stripe_customer_id: string | null;
-    type: string | null;
-  } | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [mounting, setMounting] = useState(true);
 
   useEffect(() => {
@@ -42,26 +34,41 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       setSession(session);
 
       if (session) {
-        const { data: user, error } = await supabase
+        const { data: user } = await supabase
           .from('users')
           .select('*')
           .eq('id', session.user.id)
           .single();
 
-        if (error) {
-          console.error('error', error);
-        } else {
-          setUser(user);
-        }
+        if (user) setUser(user);
       }
 
       setMounting(false);
     };
 
     fetchSession();
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setSession(session);
+
+        if (session) {
+          const { data: user } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (user) setUser(user);
+        } else {
+          setUser(null);
+        }
+      }
+    );
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
 
   return (
