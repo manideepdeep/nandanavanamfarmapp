@@ -5,8 +5,11 @@ import * as aesjs from 'aes-js';
 import 'react-native-get-random-values';
 import { Database } from '../types/database.types';
 
-const supabaseUrl = "https://wpeehggjigoklyueeugv.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwZWVoZ2dqaWdva2x5dWVldWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyODM3NTMsImV4cCI6MjA1Njg1OTc1M30.bsHD2CnDPQ2zMO5g1qfd4fnqu_eqBpZDwJqz_8vEgAg";
+//const supabaseUrl = 'https://wpeehggjigoklyueeugv.supabase.co';
+//const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwZWVoZ2dqaWdva2x5dWVldWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5ODg3NzksImV4cCI6MjA2MTU2NDc3OX0.X_aExJXo3H4WlSXPpW1xMCSdOv5POX1Q8nxKJAdUip0';
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
 // As Expo's SecureStore does not support values larger than 2048
 // bytes, an AES-256 key is generated and stored in SecureStore, while

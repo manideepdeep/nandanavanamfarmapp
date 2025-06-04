@@ -1,5 +1,4 @@
 import { Stack } from 'expo-router';
-
 import { useOrderUpdateSubscription } from '../../../api/subscriptions';
 
 export default function OrdersLayout() {
@@ -10,7 +9,9 @@ export default function OrdersLayout() {
       <Stack.Screen
         name='index'
         options={{
-          headerShown: false,
+          title: 'Orders',
+          headerStyle: { backgroundColor: '#A62F2E' },
+          headerTintColor: '#fff',
         }}
       />
     </Stack>

@@ -1,210 +1,555 @@
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ImageBackground,
   TextInput,
   TouchableOpacity,
+  Image,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../providers/auth-provider';
+import { Redirect, useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import * as zod from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Redirect, Stack } from 'expo-router';
-import { supabase } from '../lib/supabase';
-import { Toast } from 'react-native-toast-notifications';
-import { useAuth } from '../providers/auth-provider';
+import { Ionicons } from '@expo/vector-icons';
 
-const authSchema = zod.object({
-  email: zod.string().email({ message: 'Invalid email address' }),
-  password: zod
-    .string()
-    .min(6, { message: 'Password must be at least 6 characters long' }),
+const emailSchema = zod.object({
+  email: zod.string().email('Please enter a valid email'),
+  password: zod.string().min(6, 'Password must be at least 6 characters'),
 });
 
 export default function Auth() {
   const { session } = useAuth();
+  const router = useRouter();
 
-  if (session) return <Redirect href='/' />;
+  const [activeTab, setActiveTab] = useState<'mail' | 'mobile'>('mail');
+  const [isRegistering, setIsRegistering] = useState(false);
 
-  const { control, handleSubmit, formState } = useForm({
-    resolver: zodResolver(authSchema),
-    defaultValues: {
-      email: '',
-      password: '',
-    },
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [loadingMobile, setLoadingMobile] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+
+  const [showPassword, setShowPassword] = useState(false);
+
+  const {
+    control,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<zod.infer<typeof emailSchema>>({
+    resolver: zodResolver(emailSchema),
   });
 
-  const signIn = async (data: zod.infer<typeof authSchema>) => {
-    const { error } = await supabase.auth.signInWithPassword(data);
+  if (session) return <Redirect href="/" />;
 
-    if (error) {
-      alert(error.message);
-    } else {
-      Toast.show('Signed in successfully', {
-        type: 'success',
-        placement: 'top',
-        duration: 1500,
+  const isValidIndianMobile = (num: string) => /^\d{10}$/.test(num);
+  const isValidOtp = /^\d{6}$/.test(otp.trim());
+
+  // Email handlers
+  const onEmailLogin = async (data: zod.infer<typeof emailSchema>) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
       });
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      alert('Logged in successfully');
+      router.replace('/');
+    } catch {
+      alert('Unexpected error');
     }
   };
 
-  const signUp = async (data: zod.infer<typeof authSchema>) => {
-    const { error } = await supabase.auth.signUp(data);
-
-    if (error) {
-      alert(error.message);
-    } else {
-      Toast.show('Signed up successfully', {
-        type: 'success',
-        placement: 'top',
-        duration: 1500,
+  const onEmailRegister = async (data: zod.infer<typeof emailSchema>) => {
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
       });
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      alert('Registration successful! Check your email for confirmation.');
+    } catch {
+      alert('Unexpected error');
+    }
+  };
+
+  // Mobile OTP handlers
+  const sendOtp = async () => {
+    const trimmedPhone = phoneNumber.trim();
+    if (!isValidIndianMobile(trimmedPhone)) {
+      alert('Please enter a valid 10-digit Indian mobile number');
+      return;
+    }
+    setLoadingMobile(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: `+91${trimmedPhone}`,
+      });
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      alert('OTP sent to your phone');
+      setOtpSent(true);
+      setShowOtpModal(true);
+    } finally {
+      setLoadingMobile(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    const trimmedPhone = phoneNumber.trim();
+    if (!isValidIndianMobile(trimmedPhone)) {
+      alert('Invalid mobile number');
+      return;
+    }
+    if (!otp.trim()) {
+      alert('Please enter the OTP');
+      return;
+    }
+    setLoadingMobile(true);
+    try {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.verifyOtp({
+        phone: `+91${trimmedPhone}`,
+        token: otp.trim(),
+        type: 'sms',
+      });
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      if (session) {
+        alert('Logged in successfully');
+        setShowOtpModal(false);
+        setOtp('');
+        setPhoneNumber('');
+        router.replace('/');
+      }
+    } finally {
+      setLoadingMobile(false);
     }
   };
 
   return (
-    <ImageBackground
-      source={{
-        uri: 'https://i.pinimg.com/736x/e5/81/90/e581908a8abcd0d77e48f8bc15c423e8.jpg',
-      }}
-      style={styles.backgroundImage}
-    >
-      <View style={styles.overlay} />
-
-      <View style={styles.container}>
-        <Text style={styles.title}>Welcome</Text>
-        <Text style={styles.subtitle}>Please Authenticate to continue</Text>
-
-        <Controller
-          control={control}
-          name='email'
-          render={({
-            field: { value, onChange, onBlur },
-            fieldState: { error },
-          }) => (
-            <>
-              <TextInput
-                placeholder='Email'
-                style={styles.input}
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                placeholderTextColor='#aaa'
-                autoCapitalize='none'
-                editable={!formState.isSubmitting}
-              />
-              {error && <Text style={styles.error}>{error.message}</Text>}
-            </>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name='password'
-          render={({
-            field: { value, onChange, onBlur },
-            fieldState: { error },
-          }) => (
-            <>
-              <TextInput
-                placeholder='Password'
-                style={styles.input}
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                secureTextEntry
-                placeholderTextColor='#aaa'
-                autoCapitalize='none'
-                editable={!formState.isSubmitting}
-              />
-              {error && <Text style={styles.error}>{error.message}</Text>}
-            </>
-          )}
-        />
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleSubmit(signIn)}
-          disabled={formState.isSubmitting}
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.wrapper}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 50 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.buttonText}>Sign In</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.button, styles.signUpButton]}
-          onPress={handleSubmit(signUp)}
-          disabled={formState.isSubmitting}
-        >
-          <Text style={styles.buttonText}>Sign Up</Text>
-        </TouchableOpacity>
-      </View>
-    </ImageBackground>
+          {/* Logo */}
+          <Image
+            source={require('../../assets/logo/nfapplogo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+
+          {/* Heading */}
+          <Text style={styles.title}>Welcome Back!</Text>
+          <Text style={styles.subtitle}>Sign in to continue</Text>
+
+          {/* Tabs */}
+          <View style={styles.tabsContainer}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                setActiveTab('mail');
+                setIsRegistering(false);
+              }}
+              style={[
+                styles.tabButton,
+                activeTab === 'mail' ? styles.tabActive : styles.tabInactive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === 'mail' ? styles.tabTextActive : styles.tabTextInactive,
+                ]}
+              >
+                Email
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                setActiveTab('mobile');
+                setIsRegistering(false);
+              }}
+              style={[
+                styles.tabButton,
+                activeTab === 'mobile' ? styles.tabActive : styles.tabInactive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === 'mobile' ? styles.tabTextActive : styles.tabTextInactive,
+                ]}
+              >
+                Mobile
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Email Login/Register Form */}
+          {activeTab === 'mail' ? (
+            <View style={styles.form}>
+              <Controller
+                control={control}
+                name="email"
+                render={({ field: { onChange, value } }) => (
+                  <TextInput
+                    placeholder="Email address"
+                    placeholderTextColor="#B0B0B0"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    style={[styles.input, errors.email && styles.inputError]}
+                    onChangeText={onChange}
+                    value={value}
+                    editable={!isSubmitting}
+                  />
+                )}
+              />
+              {errors.email?.message && typeof errors.email.message === 'string' && (
+                <Text style={styles.error}>{errors.email.message}</Text>
+              )}
+
+              <View style={[styles.passwordWrapper, errors.password && styles.inputError]}>
+                <Controller
+                  control={control}
+                  name="password"
+                  render={({ field: { onChange, value } }) => (
+                    <TextInput
+                      placeholder="Password"
+                      placeholderTextColor="#B0B0B0"
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      style={styles.passwordInput}
+                      onChangeText={onChange}
+                      value={value}
+                      editable={!isSubmitting}
+                    />
+                  )}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons
+                    name={showPassword ? 'eye' : 'eye-off'}
+                    size={22}
+                    color="#777"
+                    style={{ paddingHorizontal: 8 }}
+                  />
+                </TouchableOpacity>
+              </View>
+              {errors.password?.message && typeof errors.password.message === 'string' && (
+                <Text style={styles.error}>{errors.password.message}</Text>
+              )}
+
+              <TouchableOpacity
+                style={styles.loginButton}
+                onPress={handleSubmit(isRegistering ? onEmailRegister : onEmailLogin)}
+                disabled={isSubmitting}
+                activeOpacity={0.9}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.loginButtonText}>
+                    {isRegistering ? 'Register' : 'Login'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setIsRegistering(!isRegistering)}
+                style={{ marginTop: 16 }}
+              >
+                <Text style={styles.toggleText}>
+                  {isRegistering
+                    ? 'Already have an account? Login'
+                    : "Don't have an account? Register"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.form}>
+              <Text style={styles.mobileInfo}>
+                Enter your mobile number to get OTP
+              </Text>
+
+              <View style={styles.phoneInputWrapper}>
+                <View style={styles.countryCodeBox}>
+                  <Text style={styles.countryCodeText}>+91</Text>
+                </View>
+                <TextInput
+                  placeholder="10-digit mobile number"
+                  placeholderTextColor="#B0B0B0"
+                  keyboardType="number-pad"
+                  maxLength={10}
+                  style={[styles.input, styles.phoneInput]}
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  editable={!loadingMobile}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={styles.loginButton}
+                onPress={sendOtp}
+                disabled={loadingMobile}
+                activeOpacity={0.9}
+              >
+                {loadingMobile ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.loginButtonText}>Send OTP</Text>
+                )}
+              </TouchableOpacity>
+
+              <Modal visible={showOtpModal} transparent animationType="fade">
+                <View style={styles.modalBackground}>
+                  <View style={styles.modalContainer}>
+                    <Text style={styles.modalTitle}>Enter OTP</Text>
+                    <TextInput
+                      placeholder="6-digit OTP"
+                      placeholderTextColor="#B0B0B0"
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      style={styles.input}
+                      value={otp}
+                      onChangeText={setOtp}
+                      editable={!loadingMobile}
+                    />
+
+                    <TouchableOpacity
+                      style={[styles.loginButton, !isValidOtp && { opacity: 0.6 }]}
+                      onPress={verifyOtp}
+                      disabled={loadingMobile || !isValidOtp}
+                      activeOpacity={0.9}
+                    >
+                      {loadingMobile ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.loginButtonText}>Verify OTP</Text>
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{ marginTop: 12 }}
+                      onPress={() => {
+                        setShowOtpModal(false);
+                        setOtp('');
+                      }}
+                    >
+                      <Text style={styles.cancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </Modal>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  backgroundImage: {
+  safeArea: { flex: 1, backgroundColor: '#F7F8FA' },
+  wrapper: {
     flex: 1,
-    resizeMode: 'cover',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.7)',
   },
   container: {
-    flex: 1,
+    padding: 24,
+    flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
+  },
+  logo: {
+    height: 180,
     width: '100%',
+    marginBottom: 32,
+    alignSelf: 'center',
   },
   title: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#222',
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 18,
-    color: '#ddd',
-    marginBottom: 32,
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 24,
   },
-  input: {
-    width: '90%',
-    padding: 12,
-    marginBottom: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 8,
-    fontSize: 16,
-    color: '#000',
+  tabsContainer: {
+    flexDirection: 'row',
+    marginBottom: 24,
+    alignSelf: 'center',
+    borderRadius: 24,
+    backgroundColor: '#E6E9F1',
+    padding: 4,
+    width: 250,
   },
-  button: {
-    backgroundColor: '#A62F2E',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-    width: '90%',
+
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 20,
     alignItems: 'center',
   },
-  signUpButton: {
+  tabActive: {
+    backgroundColor: '#A62F2E',
+  },
+  tabInactive: {
     backgroundColor: 'transparent',
-    borderColor: '#fff',
-    borderWidth: 1,
   },
-  signUpButtonText: {
-    color: '#fff',
-  },
-  buttonText: {
+  tabText: {
+    fontWeight: '600',
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
+  },
+  tabTextActive: {
+    color: 'white',
+  },
+  tabTextInactive: {
+    color: '#7A7A7A',
+  },
+  form: {
+    marginTop: 12,
+  },
+  input: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    fontSize: 16,
+    marginBottom: 10,
+    color: '#333',
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  inputError: {
+    borderColor: '#FF6B6B',
+  },
+  passwordWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#eee',
+    marginBottom: 10,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#333',
+  },
+  loginButton: {
+    backgroundColor: '#A62F2E',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    marginTop: 4,
+    alignItems: 'center',
+  },
+  loginButtonText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  toggleText: {
+    textAlign: 'center',
+    color: '#A62F2E',
+    fontWeight: '600',
+    fontSize: 14,
   },
   error: {
-    color: 'red',
-    fontSize: 12,
+    color: '#FF6B6B',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  mobileInfo: {
+    fontSize: 14,
+    color: '#444',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  phoneInputWrapper: {
+    flexDirection: 'row',
     marginBottom: 16,
-    textAlign: 'left',
-    width: '90%',
+  },
+  countryCodeBox: {
+  backgroundColor: 'white',
+  borderTopLeftRadius: 16,
+  borderBottomLeftRadius: 16,
+  justifyContent: 'center',
+  paddingHorizontal: 16,
+  borderColor: '#eee',
+  borderWidth: 1,
+  paddingVertical: 14,
+  height: 52,      
+},
+
+  countryCodeText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  phoneInput: {
+    borderTopLeftRadius: 1,
+    borderBottomLeftRadius: 1,
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#eee',
+    paddingVertical: 14,
+
+  },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  cancelText: {
+    color: '#777',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });

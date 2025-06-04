@@ -9,14 +9,14 @@ export const ProductListItem = ({
   product: Tables<'product'>;
 }) => {
   return (
-    <Link asChild href={`/product/${product.slug}`}>
-      <Pressable style={styles.item}>
+    <Link asChild href={`/product/${product.slug}`}>    
+      <Pressable style={styles.item}>      
         <View style={styles.itemImageContainer}>
           <Image source={{ uri: product.heroImage }} style={styles.itemImage} />
         </View>
         <View style={styles.itemTextContainer}>
           <Text style={styles.itemTitle}>{product.title}</Text>
-          <Text style={styles.itemPrice}>${product.price.toFixed(2)}</Text>
+          <Text style={styles.itemPrice}>₹{product.price.toFixed(2)}</Text>
         </View>
       </Pressable>
     </Link>
@@ -30,6 +30,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderRadius: 10,
     overflow: 'hidden',
+    marginBottom: 100,
   },
   itemImageContainer: {
     borderRadius: 10,

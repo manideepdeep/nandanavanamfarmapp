@@ -81,9 +81,9 @@ const ProductDetails = () => {
         <Text style={styles.slug}>Slug: {product.slug}</Text>
         <View style={styles.priceContainer}>
           <Text style={styles.price}>
-            Unit Price: ${product.price.toFixed(2)}
+            Unit Price: ₹{product.price.toFixed(2)}
           </Text>
-          <Text style={styles.price}>Total Price: ${totalPrice}</Text>
+          <Text style={styles.price}>Total Price: ₹{totalPrice}</Text>
         </View>
 
         <FlatList
